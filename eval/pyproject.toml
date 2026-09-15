@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "st-eval"
+version = "0.1.0"
+description = "Evaluation harness: synthetic Iranian-product benchmark, matting metrics, speed/VRAM sweeps, report"
+requires-python = ">=3.11"
+dependencies = [
+    "st-common",
+    "st-inference",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.9",
+    "pillow>=10",
+    "nvidia-ml-py>=12",
+]
+
+[tool.setuptools.packages.find]
+include = ["st_eval*"]

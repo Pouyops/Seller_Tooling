@@ -15,8 +15,9 @@ venv/
 
 # Large artifacts live OUTSIDE the repo (see ST_DATA_DIR in .env.example).
 # These patterns are a safety net in case someone points ST_DATA_DIR inside.
-data/
-models/
+/data/
+/models/
+/.data/
 *.onnx
 *.engine
 *.plan

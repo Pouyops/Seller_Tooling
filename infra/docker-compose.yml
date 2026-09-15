@@ -1,0 +1,94 @@
+# Local development stack.
+#   make up                     -> Valkey only (queue + job state; required by `make serve`)
+#   docker compose -f infra/docker-compose.yml --profile observability up -d   -> + Prometheus
+#   docker compose -f infra/docker-compose.yml --profile gpu up -d             -> containerized API + GPU worker
+#   docker compose -f infra/docker-compose.yml --profile bot up -d             -> Telegram bot
+#   docker compose -f infra/docker-compose.yml --profile llm up -d             -> llama.cpp server for listings
+#
+# NOTE: the `gpu` image build was not run on the dev machine (Docker's disk lives on a nearly full
+# system drive, HUMAN_NEEDED H-006). GPU services were run natively for all measurements.
+
+name: seller-tooling
+
+x-app-env: &app-env
+  ST_REDIS_URL: redis://valkey:6379/0
+  ST_DATA_DIR: /data
+  HF_HOME: /data/hf
+  ST_LOG_JSON: "true"
+
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf"]
+    ports: ["6379:6379"]
+    volumes:
+      - valkey-data:/data
+      - ./valkey.conf:/usr/local/etc/valkey/valkey.conf:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    profiles: ["observability"]
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    restart: unless-stopped
+
+  api:
+    build: { context: .., dockerfile: inference/Dockerfile }
+    profiles: ["gpu"]
+    command: ["uvicorn", "st_inference.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *app-env
+    ports: ["8000:8000"]
+    volumes: [st-data:/data]
+    depends_on: { valkey: { condition: service_healthy } }
+    restart: unless-stopped
+
+  worker:
+    build: { context: .., dockerfile: inference/Dockerfile }
+    profiles: ["gpu"]
+    command: ["python", "-m", "st_inference.worker"]
+    environment:
+      <<: *app-env
+      ST_WORKER_METRICS_PORT: "9101"
+    volumes: [st-data:/data]
+    depends_on: { valkey: { condition: service_healthy } }
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }]
+
+  bot:
+    build: { context: .., dockerfile: bot/Dockerfile }
+    profiles: ["bot"]
+    environment:
+      ST_REDIS_URL: redis://valkey:6379/1
+      ST_INFERENCE_URL: http://api:8000
+      ST_TELEGRAM_TOKEN: ${ST_TELEGRAM_TOKEN:?set ST_TELEGRAM_TOKEN in .env}
+    depends_on: { valkey: { condition: service_healthy } }
+    restart: unless-stopped
+
+  llm:
+    # llama.cpp server (MIT). Model file must be licence-cleared (docs/licenses.md §4).
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    profiles: ["llm"]
+    command: ["-m", "/models/${ST_LLM_GGUF:-Qwen3.5-4B-Q4_K_M.gguf}", "--mmproj", "/models/${ST_LLM_MMPROJ:-mmproj-F16.gguf}",
+              "--host", "0.0.0.0", "--port", "8080", "-c", "4096", "-ngl", "99", "--jinja"]
+    ports: ["8080:8080"]
+    volumes: ["${ST_DATA_DIR:-../.data}/models/llm:/models:ro"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }]
+
+volumes:
+  valkey-data:
+  st-data:
