@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Local config / secrets
+.env
+*.local.yaml
+
+# Large artifacts live OUTSIDE the repo (see ST_DATA_DIR in .env.example).
+# These patterns are a safety net in case someone points ST_DATA_DIR inside.
+data/
+models/
+*.onnx
+*.engine
+*.plan
+*.safetensors
+*.pth
+*.gguf
+eval/runs/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,26 @@
+# Root tooling config only. Each component (common, inference, bot, eval) is its own
+# installable package with its own pyproject.toml; `make setup` installs all of them
+# in editable mode into one venv.
+
+[tool.pytest.ini_options]
+testpaths = ["common/tests", "eval/tests", "inference/tests", "bot/tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "gpu: needs a CUDA device",
+    "weights: needs downloaded model weights",
+    "redis: needs a live Redis/Valkey server",
+    "llm: needs a running local llama-server",
+]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["common/st_common", "eval/st_eval", "inference/st_inference", "bot/st_bot"]
