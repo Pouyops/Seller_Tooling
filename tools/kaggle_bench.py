@@ -38,6 +38,23 @@ DEFAULT_SLUG = "seller-tooling-bench"
 DATASET_NAME = "synth-v1-s1403-n200"
 
 
+STATE = ROOT / ".kaggle-run.json"
+
+
+def remember_slug(slug: str, url: str, commit: str) -> None:
+    STATE.write_text(json.dumps({"slug": slug, "url": url, "commit": commit, "at": time.time()}, indent=2), encoding="utf-8")
+
+
+def resolve_slug(given: str | None) -> str:
+    """Kaggle derives the real slug from the *title*, ignoring the slug we ask for, so trust what
+    the push returned (stored in .kaggle-run.json) unless the caller names one explicitly."""
+    if given and given != DEFAULT_SLUG:
+        return given
+    if STATE.exists():
+        return json.loads(STATE.read_text(encoding="utf-8")).get("slug", given or DEFAULT_SLUG)
+    return given or DEFAULT_SLUG
+
+
 def creds() -> tuple[str, str]:
     user, key = os.environ.get("KAGGLE_USERNAME"), os.environ.get("KAGGLE_KEY")
     if not (user and key):
@@ -109,9 +126,15 @@ if LIMIT:
     cmd += f" --limit {{LIMIT}}"
 run(cmd, cwd=SRC)
 
-# Flatten the per-model JSON next to the report so `fetch` can grab them from the output listing.
-for p in pathlib.Path(OUT, "models").glob("*.json"):
-    shutil.copy(p, pathlib.Path(OUT, f"model_{{p.name}}"))
+# Kaggle's output *files* live on a Google CDN that is blocked from Iran (403), but the kernel LOG
+# comes back fine — so results travel home as gzipped base64 chunks on stdout.
+import base64, gzip
+for p in sorted(pathlib.Path(OUT, "models").glob("*.json")):
+    enc = base64.b64encode(gzip.compress(p.read_bytes(), 9)).decode()
+    chunks = [enc[i:i + 6000] for i in range(0, len(enc), 6000)]
+    for i, c in enumerate(chunks):
+        print(f"@@RESULT {{p.name}} {{i}} {{c}}", flush=True)
+    print(f"@@RESULT_END {{p.name}} {{len(chunks)}}", flush=True)
 print("TOTAL MINUTES", round((time.time() - t0) / 60, 1), flush=True)
 '''
 
@@ -163,17 +186,23 @@ def push(args) -> None:
     data = r.json() if r.status_code == 200 else {}
     if r.status_code != 200 or data.get("error"):
         raise SystemExit(f"push failed: {r.status_code} {r.text[:400]}")
+    url = data.get("url") or ""
+    real_slug = (data.get("ref") or url).rstrip("/").split("/")[-1] or args.slug
+    remember_slug(real_slug, url, commit)
     print(f"pushed version {data.get('versionNumber')} at commit {commit[:8]}")
-    print(f"  {data.get('url')}")
+    print(f"  {url}")
     print(f"  GPU={'off' if args.cpu else 'on'}  models={args.models}")
-    print(f"poll with: python tools/kaggle_bench.py status --slug {args.slug}")
+    if real_slug != args.slug:
+        print(f"  note: Kaggle slugified the title -> '{real_slug}' (recorded in .kaggle-run.json)")
+    print("poll with: python tools/kaggle_bench.py status --wait 90")
 
 
 def status(args) -> None:
     user, _ = creds()
+    slug = resolve_slug(args.slug)
     deadline = time.time() + args.wait * 60
     while True:
-        r = api("GET", "/kernels/status", params={"userName": user, "kernelSlug": args.slug})
+        r = api("GET", "/kernels/status", params={"userName": user, "kernelSlug": slug})
         s = r.json() if r.status_code == 200 else {"status": f"http {r.status_code}"}
         print(time.strftime("%H:%M:%S"), s.get("status"), s.get("failureMessage") or "")
         if s.get("status") in ("complete", "error", "cancelAcknowledged") or time.time() >= deadline:
@@ -183,24 +212,61 @@ def status(args) -> None:
 
 def fetch(args) -> None:
     user, _ = creds()
-    r = api("GET", "/kernels/output", params={"userName": user, "kernelSlug": args.slug}, timeout=300)
+    slug = resolve_slug(args.slug)
+    r = api("GET", "/kernels/output", params={"userName": user, "kernelSlug": slug}, timeout=300)
     if r.status_code != 200:
         raise SystemExit(f"output not available: {r.status_code} {r.text[:300]}")
     data = r.json()
     dest = Path(args.out or ROOT / "eval" / "runs" / f"kaggle-{DATASET_NAME}")
     (dest / "models").mkdir(parents=True, exist_ok=True)
     n = 0
+    log = data.get("log")
+    entries = (json.loads(log) if isinstance(log, str) else log) or []
+    stdout = "".join(str(e.get("data", "")) for e in entries if e.get("stream_name") == "stdout")
+
+    # Primary path: results embedded in the log (the output-file CDN is blocked from Iran).
+    parts: dict[str, dict[int, str]] = {}
+    expected: dict[str, int] = {}
+    for line in stdout.splitlines():
+        if line.startswith("@@RESULT "):
+            _, name, idx, chunk = line.split(" ", 3)
+            parts.setdefault(name, {})[int(idx)] = chunk.strip()
+        elif line.startswith("@@RESULT_END "):
+            _, name, count = line.split(" ", 2)
+            expected[name] = int(count)
+    import base64 as _b64, gzip as _gz
+
+    for name, chunks in parts.items():
+        want = expected.get(name, len(chunks))
+        if len(chunks) != want:
+            print(f"  ! {name}: {len(chunks)}/{want} chunks (log truncated), skipping")
+            continue
+        blob = "".join(chunks[i] for i in sorted(chunks))
+        try:
+            raw = _gz.decompress(_b64.b64decode(blob))
+        except Exception as e:
+            print(f"  ! {name}: could not decode ({e})")
+            continue
+        (dest / "models" / name).write_bytes(raw)
+        n += 1
+        print(f"  {name} <- log ({len(raw)} bytes)")
+
+    # Secondary: try the CDN files too; they work outside blocked regions.
     for f in data.get("files", []):
         name, url = f.get("fileName"), f.get("url")
-        if not url:
+        if not url or name.startswith("model_") or "/models/" in name:
             continue
-        body = httpx.get(url, auth=creds(), timeout=300, follow_redirects=True).content
-        target = dest / "models" / name[len("model_"):] if name.startswith("model_") else dest / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(body)
-        n += 1
-        print(f"  {name} -> {target.relative_to(ROOT) if ROOT in target.parents else target} ({len(body)} bytes)")
-    log = data.get("log")
+        try:
+            resp = httpx.get(url, auth=creds(), timeout=300, follow_redirects=True)
+            if resp.status_code != 200 or resp.content[:1] == b"\n<":
+                continue
+            target = dest / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(resp.content)
+            n += 1
+            print(f"  {name} <- cdn ({len(resp.content)} bytes)")
+        except httpx.HTTPError:
+            continue
     if log:
         entries = json.loads(log) if isinstance(log, str) else log
         lines = [f"[{e.get('time', 0):8.2f}] {e.get('stream_name', ''):6} {str(e.get('data', '')).rstrip()}"
@@ -224,9 +290,10 @@ def main() -> None:
     common.add_argument("--slug", default=DEFAULT_SLUG)
 
     p = sub.add_parser("push", parents=[common], help="create/update the kernel and queue a run")
-    p.add_argument("--title", default="Seller Tooling benchmark")
-    p.add_argument("--models", default="birefnet_lite,birefnet,birefnet_dynamic,ben2_base,inspyrenet_base,inspyrenet_fast,"
-                                       "birefnet_lite:fp16,birefnet:fp16,birefnet_hr#24")
+    p.add_argument("--title", default="seller tooling bench", help="Kaggle derives the slug from this")
+    # On a tensor-core GPU the registry default is already fp16, so the ":fp32" rows are the comparison.
+    p.add_argument("--models", default="birefnet_lite,birefnet_lite:fp32,birefnet,birefnet:fp32,birefnet_dynamic,"
+                                       "ben2_base,inspyrenet_base,inspyrenet_fast,birefnet_hr#24")
     p.add_argument("--batch-sizes", default="1,4,8,16")
     p.add_argument("--sweep-seconds", type=float, default=20.0)
     p.add_argument("--limit", type=int, default=None)

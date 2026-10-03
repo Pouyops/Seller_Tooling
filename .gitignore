@@ -31,3 +31,6 @@ eval/runs/
 Thumbs.db
 .idea/
 .vscode/
+
+# kaggle run state (slug/url of the last pushed kernel)
+.kaggle-run.json

@@ -100,7 +100,8 @@ class MattingModel(ABC):
 
         W, H = self.input_size or (512, 512)
         g = torch.Generator(device="cpu").manual_seed(0)
-        probe = (torch.rand((1, H, W, 3), generator=g) * 255).to(torch.uint8).numpy()
+        # one HxWx3 image: preprocess takes a list of images, not a batched array
+        probe = (torch.rand((H, W, 3), generator=g) * 255).to(torch.uint8).numpy()
         with torch.inference_mode():
             y = self.forward(self.preprocess([probe]))
         return bool(torch.isfinite(y).all())
