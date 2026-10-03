@@ -138,8 +138,13 @@ def _vram_total_mb() -> float:
     return torch.cuda.get_device_properties(0).total_memory / 2**20
 
 
+SPEED_KEYS = ("latency_bs1_ms", "throughput", "accuracy_peak_torch_mb", "accuracy_peak_device_mb", "vram_spill_bs1",
+              "load_s", "precision", "precision_note", "weights_vram_mb", "vram_total_mb")
+
+
 def bench_model(spec: str, dataset_dir: Path, metas: list[dict], batch_sizes, out_dir: Path, *,
-                models_dir: Path | None, device: str, sweep_seconds: float, save_previews: int, log=print) -> dict:
+                models_dir: Path | None, device: str, sweep_seconds: float, save_previews: int, log=print,
+                speed_only: bool = False) -> dict:
     import torch
 
     from st_inference.models import create_model
@@ -187,6 +192,8 @@ def bench_model(spec: str, dataset_dir: Path, metas: list[dict], batch_sizes, ou
                     raise FloatingPointError(f"non-finite prediction on {meta['id']}")
                 t = model.last_timing
                 timings.append({"pre": t.preprocess_ms, "fwd": t.forward_ms, "post": t.postprocess_ms, "total": t.total_ms})
+                if speed_only:
+                    continue
                 rows.append({"id": meta["id"], "category": meta["category"], "subtype": meta["subtype"], "tags": meta["tags"],
                              **compute_all(pred, gt_alpha, gt_mask), "latency_ms": t.total_ms})
                 if i < save_previews or meta["id"].endswith("_000"):
@@ -209,13 +216,14 @@ def bench_model(spec: str, dataset_dir: Path, metas: list[dict], batch_sizes, ou
         result["per_image"] = rows
         return result
 
-    result["per_image"] = rows
-    result["metrics"] = aggregate(rows, by="category")
-    tag_rows = [{**r, "tag": t} for r in rows for t in r["tags"]]
-    result["metrics_by_tag"] = aggregate(tag_rows, by="tag")
-    result["metrics_by_tag"].pop("all", None)
-    cats = [k for k in result["metrics"] if k != "all"]
-    result["metrics_balanced"] = {k: float(np.nanmean([result["metrics"][c][k] for c in cats])) for k in METRIC_KEYS}
+    if not speed_only:
+        result["per_image"] = rows
+        result["metrics"] = aggregate(rows, by="category")
+        tag_rows = [{**r, "tag": t} for r in rows for t in r["tags"]]
+        result["metrics_by_tag"] = aggregate(tag_rows, by="tag")
+        result["metrics_by_tag"].pop("all", None)
+        cats = [k for k in result["metrics"] if k != "all"]
+        result["metrics_balanced"] = {k: float(np.nanmean([result["metrics"][c][k] for c in cats])) for k in METRIC_KEYS}
     result["latency_bs1_ms"] = {
         "total": percentiles(t["total"] for t in timings),
         "forward": percentiles(t["fwd"] for t in timings),
@@ -279,7 +287,7 @@ def bench_model(spec: str, dataset_dir: Path, metas: list[dict], batch_sizes, ou
 
 def run(models: list[str], dataset_dir: Path, out_dir: Path, *, batch_sizes=DEFAULT_BATCH_SIZES, limit: int | None = None,
         models_dir: Path | None = None, device: str = "cuda", sweep_seconds: float = 20.0, force: bool = False,
-        save_previews: int = 0, log=print) -> dict:
+        save_previews: int = 0, log=print, speed_only: bool = False, speed_images: int = 60) -> dict:
     from st_inference.device import hardware_info
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -298,10 +306,36 @@ def run(models: list[str], dataset_dir: Path, out_dir: Path, *, batch_sizes=DEFA
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "models_order": models,
     }
+    if speed_only and (out_dir / "run.json").exists():
+        # keep the original run metadata, record that speed was re-measured on an idle machine
+        prev = json.loads((out_dir / "run.json").read_text(encoding="utf-8"))
+        prev["speed_rerun"] = {"at": run_info["created_at"], "git_commit": run_info["git_commit"], "images": speed_images,
+                               "hardware": run_info["hardware"], "sweep_seconds": sweep_seconds}
+        run_info = prev
     atomic_write_bytes(out_dir / "run.json", json.dumps(run_info, indent=2).encode())
     results = {}
     for spec in models:
         path = out_dir / "models" / f"{safe_name(spec)}.json"
+        if speed_only:
+            if not path.exists():
+                log(f"[bench] {spec}: no accuracy result yet; run without --speed-only first")
+                continue
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if existing.get("status") != "ok":
+                results[spec] = existing
+                continue
+            subset = balanced_subset(metas, min(speed_images, existing.get("n_images") or speed_images))
+            log(f"[bench] {spec}: re-measuring speed on {len(subset)} images")
+            res = bench_model(spec, dataset_dir, subset, batch_sizes, out_dir, models_dir=models_dir, device=device,
+                              sweep_seconds=sweep_seconds, save_previews=0, log=log, speed_only=True)
+            if res.get("status") == "ok":
+                existing.update({k: res[k] for k in SPEED_KEYS if k in res})
+                existing["speed_measured_on"] = {"images": len(subset), "at": time.strftime("%Y-%m-%d %H:%M:%S")}
+            else:
+                existing["speed_rerun_error"] = res.get("error")
+            atomic_write_bytes(path, json.dumps(existing, default=float).encode())
+            results[spec] = existing
+            continue
         if path.exists() and not force:
             log(f"[bench] {spec}: already done, skipping ({path.name})")
             results[spec] = json.loads(path.read_text(encoding="utf-8"))
@@ -326,6 +360,9 @@ def main() -> None:
     ap.add_argument("--sweep-seconds", type=float, default=20.0)
     ap.add_argument("--models-dir", type=Path, default=None)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--speed-only", action="store_true",
+                    help="re-measure latency/throughput for models that already have accuracy results (idle machine)")
+    ap.add_argument("--speed-images", type=int, default=60)
     ap.add_argument("--report", type=Path, default=Path("eval/results.md"))
     args = ap.parse_args()
 
