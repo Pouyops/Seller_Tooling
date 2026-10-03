@@ -60,8 +60,34 @@ two-tier split might collapse into one model.
   PyTorch allocator peaks are the real numbers.
 - `birefnet_lite`'s 32 s load time is first-run disk warm-up, not a property of the model.
 
+### Precision experiments (done — `eval/runs/kaggle-fp16`, `eval/runs/kaggle-amp`)
+
+The question was whether the quality leader could get ~2× cheaper the way BiRefNet did. **It can't.**
+
+| model | `.half()` (fp16) | autocast (`amp`) | verdict |
+|---|---|---|---|
+| `birefnet_lite` | **7.77 img/s**, IoU 0.909 | 5.05 img/s, IoU 0.909 | use **fp16**; autocast is 35% slower for identical output |
+| `inspyrenet_base` | **fails**: `expected scalar type Float but found Half` | **non-finite outputs**, auto-fell back to fp32 | fp32 only |
+| `inspyrenet_fast` | same failure | same | fp32 only |
+| `ben2_base` | (upstream autocast) 1.81 img/s | — | amp is worth 1.7× vs its own fp32 (1.06 img/s), same IoU 0.916 |
+
+InSPyReNet builds fp32 tensors inside its pyramid ops, so casting weights breaks the forward pass
+outright; under autocast it runs but emits NaN. Both were caught automatically — the `.half()` case by
+the loader, the autocast case by the numeric probe (ADR-008) on a GPU where fp16 is otherwise perfectly
+fine. That probe has now paid for itself twice on two different failure modes.
+
+**Consequence:** the two-tier recommendation stands unchanged. `birefnet_lite` fp16 for the free tier
+(7.8 img/s), `inspyrenet_base` fp32 for paid (1.5–1.8 img/s). Making the quality tier cheaper needs a
+different model or patched upstream code, not a precision flag.
+
+**Measurement noise:** the same `inspyrenet_base` fp32 configuration measured 1.54 img/s in two runs and
+1.80 in a third on Kaggle's shared hardware — about ±17%. Treat throughput differences smaller than that
+as noise unless they reproduce.
+
 ### Next experiments, in order
 
-1. `inspyrenet_base` and `ben2_base` in fp16 (one kernel run, ~10 min).
-2. GPU-side preprocessing, then re-measure batching honestly.
-3. Per-category routing: `birefnet_hr` for carpets only, if fringe quality turns out to sell.
+1. GPU-side preprocessing, then re-measure batching honestly.
+2. Per-category routing: `birefnet_hr` for carpets only, if fringe quality turns out to sell.
+3. If the quality tier needs to be cheaper: try `ben2_base` (amp, 1.81 img/s, best BF@3px of the
+   three) as the paid-tier model instead of `inspyrenet_base`, trading thin-structure recall
+   (0.708 vs 0.818) for ~20% more throughput.

@@ -1,0 +1,1 @@
+{"spec": "inspyrenet_base:fp16", "name": "inspyrenet_base", "status": "load_failed", "started_at": 1791039125.123283, "n_images": 200, "partial": false, "requested_precision": "fp16", "input_size": [1024, 1024], "repo_id": "plemeri/InSPyReNet", "error": "RuntimeError: expected scalar type Float but found Half"}

@@ -1,0 +1,66 @@
+{
+  "dataset_dir": "/tmp/st-data/data/bench/synth-v1-s1403-n200",
+  "dataset": {
+    "generator_version": "synth-v1",
+    "seed": 1403,
+    "n": 200,
+    "supersampling": 2,
+    "counts": {
+      "carpet": 40,
+      "jewelry": 40,
+      "saffron_packaged": 30,
+      "glassware": 30,
+      "handicraft": 30,
+      "clothing_hanger": 30
+    },
+    "tag_counts": {
+      "cast_shadow": 131,
+      "thin_structures": 125,
+      "high_frequency_texture": 70,
+      "holes": 67,
+      "reflective": 54,
+      "transparency": 51,
+      "low_contrast": 36,
+      "cluttered_bg": 27,
+      "disconnected_parts": 23,
+      "liquid": 19,
+      "patterned_bg": 17,
+      "surface_reflection": 16,
+      "occluding_rail": 14,
+      "scalloped_edge": 10,
+      "zigzag_edge": 7,
+      "saucer": 6,
+      "fuzzy_edge": 5,
+      "lace": 5
+    }
+  },
+  "n_images": 200,
+  "limit": null,
+  "batch_sizes": [
+    1,
+    4,
+    8
+  ],
+  "sweep_seconds": 15.0,
+  "hardware": {
+    "platform": "Linux-6.18.48+-x86_64-with-glibc2.39",
+    "python": "3.13.15",
+    "cpu": "x86_64",
+    "cpu_cores_logical": 4,
+    "ram_gb": 31.3,
+    "torch": "2.11.0+cu128",
+    "cuda_runtime": "12.8",
+    "gpu": "Tesla T4",
+    "gpu_vram_gb": 14.56,
+    "gpu_capability": "7.5",
+    "nvidia_driver": "580.178.04",
+    "gpu_power_limit_w": 70.0
+  },
+  "git_commit": "c009818",
+  "created_at": "2026-10-03 15:13:45",
+  "models_order": [
+    "inspyrenet_base:amp",
+    "inspyrenet_fast:amp",
+    "birefnet_lite:amp"
+  ]
+}
