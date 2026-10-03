@@ -22,20 +22,26 @@ nothing that can be geo-blocked at runtime.** Target deployment is a single 24 G
 | **Listing generator** | Not started (next after the bot). Local LLM over an OpenAI-compatible llama.cpp server. |
 | **Economics model** | Not started — blocked on clean speed numbers (see below). |
 
-### Measured results so far (GTX 1650 4 GB, fp32, synthetic set, 200 images)
+### Measured results (Tesla T4 16 GB, synthetic set, 200 images) — full tables in [`eval/results.md`](eval/results.md)
 
-| model | balanced IoU | BF | BF@3px | thin recall | p50 latency |
-|---|---|---|---|---|---|
-| `birefnet` (Swin-L) | 0.939 | 0.891 | 0.816 | 0.689 | 3.3 s |
-| `birefnet_lite` (Swin-T) | 0.909 | 0.855 | 0.780 | 0.702 | 0.60 s |
+| model | precision | Q | IoU | BF@3px | thin recall | p50 latency | img/s | peak VRAM |
+|---|---|---|---|---|---|---|---|---|
+| `inspyrenet_base` | fp32 | **0.865** | 0.908 | 0.833 | 0.818 | 649 ms | 1.5 | 2.7 GB |
+| `ben2_base` | amp | 0.844 | 0.916 | 0.844 | 0.708 | 546 ms | 1.8 | 2.4 GB |
+| `birefnet` | fp16 | 0.834 | 0.940 | 0.816 | 0.690 | 371 ms | 2.7 | 1.6 GB |
+| `birefnet_lite` | fp16 | 0.811 | 0.909 | 0.780 | 0.702 | **122 ms** | **7.8** | 0.9 GB |
+| `inspyrenet_fast` | fp32 | 0.780 | 0.905 | 0.730 | 0.641 | 82 ms | 11.7 | 1.0 GB |
 
-Four more models (BEN2, InSPyReNet ×2, BiRefNet_HR) had not finished when the run was interrupted;
-`make bench` resumes where it stopped. Throughput/latency numbers from that run are **contaminated**
-by concurrent test runs and must be re-measured with `--speed-only` on an idle machine.
+Recommendation (reasoning in [`eval/analysis.md`](eval/analysis.md)): **`birefnet_lite` fp16 for the
+free tier, `inspyrenet_base` for paid/hard categories** — the queue already routes per-job model and priority.
 
-**fp16 is unusable on GTX 16xx** (all-NaN mattes — the known half-precision bug); the loader detects
-this and falls back to fp32, recording the reason in every result. On a 3090/4090 fp16 is used after
-a numeric probe (ADR-008).
+Three findings worth knowing before touching this code:
+- **fp16 costs nothing and saves 2.6–2.8×** on tensor-core GPUs: identical Q to fp32, far faster. But it
+  produces **all-NaN mattes on GTX 16xx**, so the loader probes and falls back (ADR-008).
+- **Batching currently doesn't help** (throughput is flat to falling from bs=1 to bs=16) because
+  preprocessing resizes on the CPU, one image at a time. Fix that before judging batch sizes.
+- **Loose saffron threads defeat every model** (thin recall 0.02–0.52) — a fine-tuning target, not a
+  model-selection one.
 
 ## Layout
 

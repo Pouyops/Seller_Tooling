@@ -12,6 +12,7 @@ class BotSettings(CommonSettings):
 
     free_quota_per_month: int = 20  # resets on the 1st of each Jalali (Solar Hijri) month
     rate_limit_per_minute: int = 10
+    max_upload_mb: float = 15.0  # keep in step with the inference API's own limit
     max_album_photos: int = 10
     album_collect_ms: int = 1500  # wait this long for the rest of a media group
     job_wait_s: float = 25.0  # wait inline this long, then deliver later from the pending set
@@ -20,6 +21,10 @@ class BotSettings(CommonSettings):
 
     payments_dev_confirm: bool = False  # allow /devpay to mark a stub invoice paid (never in production)
     admin_user_ids: str = ""
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return int(self.max_upload_mb * 2**20)
 
     @property
     def admins(self) -> set[int]:

@@ -129,7 +129,9 @@ run(cmd, cwd=SRC)
 # Kaggle's output *files* live on a Google CDN that is blocked from Iran (403), but the kernel LOG
 # comes back fine — so results travel home as gzipped base64 chunks on stdout.
 import base64, gzip
-for p in sorted(pathlib.Path(OUT, "models").glob("*.json")):
+for p in [pathlib.Path(OUT, "run.json")] + sorted(pathlib.Path(OUT, "models").glob("*.json")):
+    if not p.exists():
+        continue
     enc = base64.b64encode(gzip.compress(p.read_bytes(), 9)).decode()
     chunks = [enc[i:i + 6000] for i in range(0, len(enc), 6000)]
     for i, c in enumerate(chunks):
@@ -247,7 +249,8 @@ def fetch(args) -> None:
         except Exception as e:
             print(f"  ! {name}: could not decode ({e})")
             continue
-        (dest / "models" / name).write_bytes(raw)
+        target = dest / name if name == "run.json" else dest / "models" / name
+        target.write_bytes(raw)
         n += 1
         print(f"  {name} <- log ({len(raw)} bytes)")
 

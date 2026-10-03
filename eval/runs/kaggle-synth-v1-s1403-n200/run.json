@@ -1,0 +1,71 @@
+{
+  "dataset_dir": "/tmp/st-data/data/bench/synth-v1-s1403-n200",
+  "dataset": {
+    "generator_version": "synth-v1",
+    "seed": 1403,
+    "n": 200,
+    "supersampling": 2,
+    "counts": {
+      "carpet": 40,
+      "jewelry": 40,
+      "saffron_packaged": 30,
+      "glassware": 30,
+      "handicraft": 30,
+      "clothing_hanger": 30
+    },
+    "tag_counts": {
+      "cast_shadow": 131,
+      "thin_structures": 125,
+      "high_frequency_texture": 70,
+      "holes": 67,
+      "reflective": 54,
+      "transparency": 51,
+      "low_contrast": 36,
+      "cluttered_bg": 27,
+      "disconnected_parts": 23,
+      "liquid": 19,
+      "patterned_bg": 17,
+      "surface_reflection": 16,
+      "occluding_rail": 14,
+      "scalloped_edge": 10,
+      "zigzag_edge": 7,
+      "saucer": 6,
+      "fuzzy_edge": 5,
+      "lace": 5
+    }
+  },
+  "n_images": 200,
+  "batch_sizes": [
+    1,
+    4,
+    8,
+    16
+  ],
+  "sweep_seconds": 20.0,
+  "created_at": "2026-10-03 (Kaggle T4)",
+  "git_commit": "8ba45a6",
+  "limit": null,
+  "models_order": [
+    "birefnet_lite",
+    "birefnet_lite:fp32",
+    "birefnet",
+    "birefnet:fp32",
+    "birefnet_dynamic",
+    "ben2_base",
+    "inspyrenet_base",
+    "inspyrenet_fast",
+    "birefnet_hr#24"
+  ],
+  "hardware": {
+    "gpu": "Tesla T4",
+    "gpu_vram_gb": 14.6,
+    "gpu_capability": "7.5",
+    "nvidia_driver": "580.178.04",
+    "torch": "2.11.0+cu128",
+    "cpu": "Kaggle kernel vCPU",
+    "cpu_cores_logical": 4,
+    "ram_gb": 31.0,
+    "platform": "Linux (Kaggle)",
+    "cuda_runtime": "12.x"
+  }
+}
