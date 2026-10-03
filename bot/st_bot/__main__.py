@@ -26,8 +26,13 @@ log = get_logger("st_bot.main")
 
 def make_bot(settings: BotSettings) -> Bot:
     session = None
-    if settings.telegram_api_base:
-        session = AiohttpSession(api=TelegramAPIServer.from_base(settings.telegram_api_base.rstrip("/")))
+    base = (settings.telegram_api_base or "").strip()
+    if base and not base.startswith(("http://", "https://")):
+        # A trailing comment in .env used to land here and produce an unusable API URL.
+        log.warning("telegram.api_base_ignored", extra={"value": base[:60]})
+        base = ""
+    if base:
+        session = AiohttpSession(api=TelegramAPIServer.from_base(base.rstrip("/")))
     return Bot(settings.telegram_token, session=session, default=DefaultBotProperties(parse_mode=None))
 
 

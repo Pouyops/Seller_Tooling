@@ -58,6 +58,37 @@ async def run(args) -> None:
     # so /healthz would report "no worker" on a healthy idle system without this.
     tasks = [asyncio.create_task(worker_loop()), asyncio.create_task(worker._heartbeat_loop())]
     task = tasks[0]
+    stop_bot = asyncio.Event()
+    bot = None
+
+    if args.bot:
+        from aiogram import Dispatcher
+        from aiogram.types import BotCommand
+
+        from st_bot import texts as T
+        from st_bot.__main__ import delivery_loop, make_bot
+        from st_bot.config import get_bot_settings
+        from st_bot.handlers import build_router
+        from st_bot.inference_client import InferenceClient
+        from st_bot.payments import StubPaymentProvider
+        from st_bot.service import CutoutService
+
+        bot_settings = get_bot_settings()
+        if not bot_settings.telegram_token:
+            raise SystemExit("ST_TELEGRAM_TOKEN is not set in .env — see HUMAN_NEEDED.md H-004")
+        # The bot talks to the API over real HTTP, exactly as it would in production.
+        client = InferenceClient(f"http://127.0.0.1:{args.port}")
+        service = CutoutService(bot_settings, redis, client)
+        bot = make_bot(bot_settings)
+        dp = Dispatcher()
+        router = build_router(service, StubPaymentProvider(redis, service.ledger), bot_settings)
+        dp.include_router(router)
+        me = await bot.get_me()
+        for lang in ("fa", None):
+            await bot.set_my_commands([BotCommand(command=c, description=d) for c, d in T.COMMANDS], language_code=lang)
+        print(f"[demo] telegram bot @{me.username} polling — free quota {bot_settings.free_quota_per_month}/month")
+        tasks.append(asyncio.create_task(dp.start_polling(bot, handle_signals=False)))
+        tasks.append(asyncio.create_task(delivery_loop(bot, service, bot_settings, stop_bot)))
     config = uvicorn.Config(app, host=args.host, port=args.port, log_level=args.log_level.lower(), access_log=False)
     server = uvicorn.Server(config)
     print(f"[demo] model={args.model}  queue={queue_kind}")
@@ -67,9 +98,12 @@ async def run(args) -> None:
         await server.serve()
     finally:
         worker.stopping.set()
+        stop_bot.set()
         for t in tasks:
             t.cancel()
         worker._unload_all()
+        if bot is not None:
+            await bot.session.close()
         await redis.aclose()
 
 
@@ -80,6 +114,7 @@ def main() -> None:
     ap.add_argument("--model", default="birefnet_lite")
     ap.add_argument("--max-batch", type=int, default=2)
     ap.add_argument("--log-level", default="warning")
+    ap.add_argument("--bot", action="store_true", help="also run the Telegram bot (needs ST_TELEGRAM_TOKEN in .env)")
     try:
         asyncio.run(run(ap.parse_args()))
     except KeyboardInterrupt:

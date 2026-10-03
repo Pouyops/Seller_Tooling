@@ -111,9 +111,17 @@ speaker still needs to review — H-013).
 ## Trying it in a browser
 
 ```bash
-python tools/serve_demo.py        # API + GPU worker + web page in one process, no Docker
+python tools/serve_demo.py            # API + GPU worker + web page, one process, no Docker needed
+python tools/serve_demo.py --bot      # ...and the Telegram bot too (needs ST_TELEGRAM_TOKEN in .env)
 # then open http://127.0.0.1:8000/
 ```
+
+With `make up` running (Valkey), the same command uses the real queue and quotas survive a restart;
+without it, the queue runs in-process and it says so.
+
+> **`.env` gotcha:** keep comments on their own lines. `KEY=value  # note` stores the comment as part
+> of the value — that silently turned `ST_TELEGRAM_API_BASE` into a comment string and broke the bot.
+> `.env.example` no longer uses trailing comments.
 
 `make serve` is the real layout (separate API and worker, Valkey as the queue). `serve_demo.py` is the
 convenience version for a laptop: if no Redis/Valkey is reachable it runs the queue in-process and says
