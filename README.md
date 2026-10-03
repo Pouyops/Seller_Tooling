@@ -19,8 +19,9 @@ nothing that can be geo-blocked at runtime.** Target deployment is a single 24 G
 | **Inference service** (`inference/`) | FastAPI + Redis-Streams queue + GPU worker. Content-hash dedupe, micro-batching, OOM batch splitting, crash recovery, disk spool when Redis is down, `/healthz`, `/metrics`, JSON logs. |
 | **Telegram bot** (`bot/`) | Working end to end: photo (or image file) in → PNG cutout out, albums, Jalali-month quota, rate limiting, credit ledger with refunds, stub payments, Persian UI, deferred delivery that survives a restart. Verified against a mock Bot API — **no token exists yet** (H-004). |
 | **Persian text** (`common/`) | ZWNJ (نیم‌فاصله) repair, ی/ک normalization, digit forms, bidi handling for mixed LTR/RTL, validation. 100% line coverage. |
+| **Unit economics** (`docs/economics.md`) | Built from measured throughput, payload sizes and pipeline timings; business prices are declared assumptions (H-014). Headline: **~5 toman/image**, so compute is ~0.1% of a 50k subscription. |
 | **Listing generator** (`inference/st_inference/listing/`) | Working: product photo + seller fields → Persian title, description, attributes, keywords. Local Qwen3.5-2B (Apache-2.0) over llama.cpp; validate-and-repair with a deterministic fallback so a listing is never empty. Model quality needs a bigger model and a native-speaker review (H-013). |
-| **Economics model** | Not started — blocked on clean speed numbers (see below). |
+
 
 ### Measured results (Tesla T4 16 GB, synthetic set, 200 images) — full tables in [`eval/results.md`](eval/results.md)
 
@@ -80,6 +81,7 @@ make setup                    # Windows: .\make.cmd setup
 | `make bench` | full model comparison → `eval/results.md` (resumable; GPU) |
 | `make bench-quick` | 2 models × 24 images smoke check |
 | `make bench-kaggle` | run the benchmark on a free Kaggle T4 (16 GB) and fetch the results |
+| `make economics` | recompute `docs/economics.md` from the measured runs |
 | `make serve` | Valkey + inference API + GPU worker |
 | `make bot` | Telegram bot (needs `ST_TELEGRAM_TOKEN`) |
 | `make up` / `make down` | docker compose |

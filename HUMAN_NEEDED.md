@@ -180,6 +180,28 @@ like a competent Iranian seller wrote it, and no automated metric settles that.
 
 ---
 
+## H-014 — The price inputs behind `docs/economics.md`
+**Status:** OPEN — the model is built, the business prices in it are guesses
+
+`tools/economics.py` reads throughput, payload sizes and pipeline timings from the actual benchmark
+and load-test runs, so the engineering half is evidence. The money half is not: exchange rate, GPU
+purchase price in Iran, commercial electricity tariff, and object-storage/egress quotes are all
+placeholders I invented (§2 of the report lists each one).
+
+Sensitivity says only two of them matter: **utilisation** (35% → 15% costs +73%) and the
+**toman/USD rate** (+50% costs +47%). Electricity is noise at Iranian tariffs.
+
+- **Option A:** Get one real quote for each — a supplier price for a 4090, a recent commercial
+  electricity bill, and an ArvanCloud/Parspack price list — then re-run `make economics`.
+- **Option B:** Ship with placeholders and never quote a cost externally.
+
+**Recommendation:** A; it is an hour of phone calls and it moves the headline number by up to 50%.
+Note the conclusion is unlikely to change: compute is ~0.1% of a 50k subscription, so pricing is a
+market question (H-011), not a cost-plus one.
+**Blocks:** any external claim about margins or cost per image.
+
+---
+
 ## H-005 — Real benchmark images (and the rights to use them)
 **Status:** WORKAROUND-IN-PLACE (synthetic proxy set; see `docs/dataset-gap.md`)
 

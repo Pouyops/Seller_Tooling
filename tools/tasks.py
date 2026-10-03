@@ -20,6 +20,7 @@ Targets
   weights      download weights only
   dataset      build the synthetic benchmark set only
   report       re-render eval/results.md from the latest run
+  economics    recompute docs/economics.md from the measured benchmark + load test
 """
 
 from __future__ import annotations
@@ -207,6 +208,7 @@ def main(argv: list[str]) -> None:
         "bench-quick": t_bench_quick,
         "bench-kaggle": lambda: sh([PY, str(ROOT / "tools" / "kaggle_bench.py"), *(rest or ["push"])]),
         "report": t_report,
+        "economics": lambda: sh([PY, str(ROOT / "tools" / "economics.py"), *rest]),
         "weights": lambda: t_weights(rest or None),
         "dataset": t_dataset,
         "serve": t_serve,
