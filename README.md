@@ -5,6 +5,9 @@ Instagram shops. Every model is open-weight and self-hosted: **no OpenAI / Anthr
 nothing that can be geo-blocked at runtime.** Target deployment is a single 24 GB consumer GPU
 (RTX 3090/4090).
 
+> **Picking this up cold?** Read **[`HANDOFF.md`](HANDOFF.md)** — orientation, the traps that cost
+> hours to find, and what to do next.
+
 > **Status: foundations built, not production.** Read `HUMAN_NEEDED.md` first — it lists every open
 > decision with options and a recommendation. All benchmark numbers so far were measured on a
 > **GTX 1650 (4 GB)**, not the target hardware (H-001), and on a **synthetic** benchmark set (H-005).
