@@ -23,6 +23,7 @@ import re
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI, File, Form, Request, UploadFile
@@ -365,6 +366,13 @@ def create_app(settings: ServiceSettings | None = None, redis_client=None, confi
     @app.get("/metrics")
     async def metrics():
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+    # The RTL seller page, if it is present. Mounted last so it never shadows /v1, /healthz or /metrics.
+    web_dir = Path(__file__).resolve().parents[2] / "web"
+    if web_dir.is_dir():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="web")
 
     return app
 

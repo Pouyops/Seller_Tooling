@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حذف پس‌زمینه عکس محصول</title>
+<!-- No CDN: fonts and scripts load from this origin only. Google Fonts is geo-blocked from Iran,
+     and a seller on a slow connection should not wait for a third party. -->
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #272c37; --text: #e8eaf0; --muted: #9aa3b5;
+    --accent: #3b82f6; --ok: #22c55e; --warn: #f59e0b; --err: #ef4444; --radius: 12px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #fff; --line: #e3e6ec; --text: #15181f; --muted: #5b6475; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text); padding: 16px;
+    font-family: Vazirmatn, "Segoe UI", Tahoma, "Iranian Sans", sans-serif; line-height: 1.7;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 1.35rem; margin: 8px 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; font-size: .95rem; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  #drop {
+    border: 2px dashed var(--line); border-radius: var(--radius); padding: 32px 16px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  #drop.over { border-color: var(--accent); background: rgba(59,130,246,.08); }
+  #drop strong { display: block; font-size: 1.05rem; margin-bottom: 6px; }
+  #drop span { color: var(--muted); font-size: .9rem; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; }
+  label.choice { display: flex; align-items: center; gap: 6px; font-size: .92rem; color: var(--muted); cursor: pointer; }
+  button {
+    font: inherit; background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 9px 18px; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .jobs { display: grid; gap: 12px; margin-top: 18px; }
+  .job { display: grid; grid-template-columns: 110px 1fr auto; gap: 14px; align-items: center;
+         background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .thumb {
+    width: 110px; height: 110px; border-radius: 8px; overflow: hidden; display: grid; place-items: center;
+    background-color: #cfd3da;
+    background-image: linear-gradient(45deg, #b6bcc6 25%, transparent 25%), linear-gradient(-45deg, #b6bcc6 25%, transparent 25%),
+                      linear-gradient(45deg, transparent 75%, #b6bcc6 75%), linear-gradient(-45deg, transparent 75%, #b6bcc6 75%);
+    background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .name { font-size: .92rem; word-break: break-all; }
+  .status { font-size: .88rem; color: var(--muted); margin-top: 3px; }
+  .status.done { color: var(--ok); } .status.err { color: var(--err); } .status.work { color: var(--warn); }
+  .bar { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; width: 30%; background: var(--accent); animation: slide 1.1s infinite; }
+  @keyframes slide { 0% { margin-right: -30%; } 100% { margin-right: 100%; } }
+  a.dl { font-size: .9rem; color: var(--accent); text-decoration: none; }
+  .hint { color: var(--muted); font-size: .85rem; margin-top: 18px; }
+  .offline { background: var(--err); color: #fff; padding: 8px 12px; border-radius: 8px; margin-bottom: 14px; display: none; }
+  @media (max-width: 560px) { .job { grid-template-columns: 76px 1fr; } .thumb { width: 76px; height: 76px; } a.dl { grid-column: 2; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>حذف پس‌زمینه عکس محصول</h1>
+  <p class="sub">عکس محصول را بفرستید تا نسخه‌ی بدون پس‌زمینه را بگیرید. ثبت‌نام لازم نیست.</p>
+
+  <div class="offline" id="offline">ارتباط با سرویس برقرار نیست. عکس‌ها در صف می‌مانند و پس از وصل شدن ارسال می‌شوند.</div>
+
+  <div class="panel">
+    <div id="drop" tabindex="0" role="button" aria-label="انتخاب عکس">
+      <strong>عکس را اینجا رها کنید</strong>
+      <span>یا کلیک کنید / کلید Ctrl+V را بزنید — JPG، PNG یا WebP</span>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+    </div>
+    <div class="controls">
+      <label class="choice"><input type="radio" name="bg" value="transparent" checked> پس‌زمینه‌ی شفاف (PNG)</label>
+      <label class="choice"><input type="radio" name="bg" value="white"> پس‌زمینه‌ی سفید (JPG) — مناسب دیجی‌کالا</label>
+      <button id="clear" type="button">پاک کردن فهرست</button>
+    </div>
+  </div>
+
+  <div class="jobs" id="jobs"></div>
+  <p class="hint">عکس‌ها فقط برای پردازش ذخیره می‌شوند. برای کیفیت بهتر، عکس را در نور کافی و روی زمینه‌ای با رنگ متفاوت بگیرید.</p>
+</div>
+
+<script>
+// Same-origin by default; override with ?api=http://host:8000 when the page is opened from a file.
+const API = new URLSearchParams(location.search).get("api") || "";
+const ERRORS = {
+  too_large: "حجم فایل بیش از حد مجاز است.",
+  not_an_image: "این فایل تصویر نیست.",
+  unsupported_format: "این قالب تصویر پشتیبانی نمی‌شود.",
+  too_many_pixels: "ابعاد تصویر بیش از حد بزرگ است.",
+  unknown_model: "مدل انتخاب‌شده در دسترس نیست.",
+  unavailable: "سرویس موقتاً در دسترس نیست. چند دقیقه بعد دوباره تلاش کنید.",
+  queue_unavailable: "صف پردازش در دسترس نیست. دوباره تلاش کنید.",
+};
+const STATUS_FA = { queued: "در صف پردازش…", running: "در حال پردازش…", done: "آماده است", failed: "ناموفق" };
+
+const jobsEl = document.getElementById("jobs");
+const dropEl = document.getElementById("drop");
+const fileEl = document.getElementById("file");
+const offlineEl = document.getElementById("offline");
+
+const setOffline = (on) => { offlineEl.style.display = on ? "block" : "none"; };
+window.addEventListener("online", () => setOffline(false));
+window.addEventListener("offline", () => setOffline(true));
+
+dropEl.addEventListener("click", () => fileEl.click());
+dropEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") fileEl.click(); });
+fileEl.addEventListener("change", () => { add([...fileEl.files]); fileEl.value = ""; });
+["dragenter", "dragover"].forEach((t) => dropEl.addEventListener(t, (e) => { e.preventDefault(); dropEl.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => dropEl.addEventListener(t, () => dropEl.classList.remove("over")));
+dropEl.addEventListener("drop", (e) => { e.preventDefault(); add([...e.dataTransfer.files]); });
+document.addEventListener("paste", (e) => add([...e.clipboardData.files]));
+document.getElementById("clear").addEventListener("click", () => { jobsEl.innerHTML = ""; });
+
+function card(file) {
+  const el = document.createElement("div");
+  el.className = "job";
+  el.innerHTML = `<div class="thumb"><img alt=""></div>
+    <div><div class="name"></div><div class="status work">در حال ارسال…</div><div class="bar"><i></i></div></div>
+    <a class="dl" hidden download>دانلود</a>`;
+  el.querySelector(".name").textContent = file.name;
+  el.querySelector("img").src = URL.createObjectURL(file);
+  jobsEl.prepend(el);
+  return {
+    el,
+    status(text, kind) {
+      const s = el.querySelector(".status");
+      s.textContent = text;
+      s.className = "status " + (kind || "");
+      if (kind === "done" || kind === "err") el.querySelector(".bar")?.remove();
+    },
+    result(url, name) {
+      const a = el.querySelector(".dl");
+      a.href = url; a.download = name; a.hidden = false;
+      el.querySelector("img").src = url;
+    },
+  };
+}
+
+function add(files) {
+  files.filter((f) => f.type.startsWith("image/")).forEach(upload);
+}
+
+async function upload(file) {
+  const ui = card(file);
+  const body = new FormData();
+  body.append("file", file);
+  body.append("background", document.querySelector('input[name="bg"]:checked').value);
+  body.append("wait", "8");
+  let res;
+  try {
+    res = await fetch(API + "/v1/matting", { method: "POST", body });
+  } catch {
+    setOffline(true);
+    return ui.status("ارتباط برقرار نشد. اتصال اینترنت را بررسی کنید.", "err");
+  }
+  setOffline(false);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && res.status !== 202) {
+    return ui.status(ERRORS[data.error] || data.message || "خطا در پردازش", "err");
+  }
+  if (data.deduplicated) ui.status("این عکس قبلاً پردازش شده بود…", "work");
+  await poll(data.job_id, ui, file.name);
+}
+
+async function poll(jobId, ui, name) {
+  const started = Date.now();
+  let delay = 700;
+  for (;;) {
+    let job;
+    try {
+      const r = await fetch(`${API}/v1/jobs/${jobId}`);
+      if (r.status === 404) return ui.status("این درخواست پیدا نشد.", "err");
+      job = await r.json();
+      setOffline(false);
+    } catch {
+      setOffline(true);               // keep polling: the job is safe in the queue
+      await sleep(2000);
+      continue;
+    }
+    if (job.status === "done") {
+      const blob = await (await fetch(API + job.result.url)).blob();
+      const ext = job.result.mime === "image/jpeg" ? "jpg" : "png";
+      ui.result(URL.createObjectURL(blob), name.replace(/\.[^.]+$/, "") + "-cutout." + ext);
+      return ui.status(`آماده است — ${Math.round((Date.now() - started) / 100) / 10} ثانیه`, "done");
+    }
+    if (job.status === "failed") return ui.status("پردازش ناموفق بود. دوباره تلاش کنید.", "err");
+    ui.status(STATUS_FA[job.status] || job.status, "work");
+    await sleep(delay);
+    delay = Math.min(delay * 1.4, 3000);
+  }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+</script>
+</body>
+</html>
