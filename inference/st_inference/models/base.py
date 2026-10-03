@@ -79,8 +79,9 @@ class MattingModel(ABC):
         model.eval()
         model.to(self.device)
         cuda = self.device.startswith("cuda")
-        if self.precision == "fp16" and cuda and fp16_unreliable(self.device):
-            self.precision_note = f"fp16 requested but disabled: known NaN outputs on {torch.cuda.get_device_name(self.device)}"
+        if self.precision in ("fp16", "amp") and cuda and fp16_unreliable(self.device):
+            self.precision_note = (f"{self.precision} requested but disabled: known NaN outputs on "
+                                   f"{torch.cuda.get_device_name(self.device)}")
             self.precision = "fp32"
         if self.precision == "fp16" and cuda:
             model.half()
@@ -89,7 +90,7 @@ class MattingModel(ABC):
             model.float()
         self.model = model
         torch.set_grad_enabled(False)
-        if self.precision == "fp16" and cuda and not self._outputs_finite():
+        if self.precision in ("fp16", "amp") and cuda and not self._outputs_finite():
             self.precision_note = "fp16 produced non-finite outputs on a probe input; fell back to fp32"
             self.precision = "fp32"
             self.model.float()
@@ -102,7 +103,7 @@ class MattingModel(ABC):
         g = torch.Generator(device="cpu").manual_seed(0)
         # one HxWx3 image: preprocess takes a list of images, not a batched array
         probe = (torch.rand((H, W, 3), generator=g) * 255).to(torch.uint8).numpy()
-        with torch.inference_mode():
+        with torch.inference_mode(), self._autocast():
             y = self.forward(self.preprocess([probe]))
         return bool(torch.isfinite(y).all())
 
@@ -122,7 +123,15 @@ class MattingModel(ABC):
     def _dtype(self):
         import torch
 
+        # "amp" keeps weights and inputs fp32 and lets autocast cast per operation. Some models
+        # (InSPyReNet) mix dtypes internally and simply fail under .half(); autocast handles them.
         return torch.float16 if (self.precision == "fp16" and self.device.startswith("cuda")) else torch.float32
+
+    def _autocast(self):
+        import torch
+
+        return torch.autocast("cuda", dtype=torch.float16,
+                              enabled=self.precision == "amp" and self.device.startswith("cuda"))
 
     def preprocess(self, images: list[np.ndarray]):
         import torch
@@ -160,7 +169,7 @@ class MattingModel(ABC):
         x = self.preprocess(images)
         sync()
         t1 = time.perf_counter()
-        with torch.inference_mode():
+        with torch.inference_mode(), self._autocast():
             probs = self.forward(x)
         sync()
         t2 = time.perf_counter()
