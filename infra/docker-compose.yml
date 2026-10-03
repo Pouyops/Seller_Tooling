@@ -71,7 +71,9 @@ services:
     environment:
       ST_REDIS_URL: redis://valkey:6379/1
       ST_INFERENCE_URL: http://api:8000
-      ST_TELEGRAM_TOKEN: ${ST_TELEGRAM_TOKEN:?set ST_TELEGRAM_TOKEN in .env}
+      # Deliberately not `:?` — that would make *every* compose command (even `up valkey`) fail
+      # when the token is unset. The bot exits with a clear message instead.
+      ST_TELEGRAM_TOKEN: ${ST_TELEGRAM_TOKEN:-}
     depends_on: { valkey: { condition: service_healthy } }
     restart: unless-stopped
 

@@ -17,7 +17,7 @@ nothing that can be geo-blocked at runtime.** Target deployment is a single 24 G
 | **Benchmark set** (`eval/st_eval/synth/`) | 200 procedurally rendered images with exact alpha ground truth, across six hard Iranian categories (carpet fringe, gold chains, saffron threads, glassware, handicrafts, clothing on hangers). Deterministic from a seed. |
 | **Eval harness** (`eval/`) | IoU, boundary F (DAVIS + strict 3 px), thin-structure recall, alpha MAE; latency p50/p90/p99, VRAM peak, throughput sweeps with OOM **and VRAM-spill** detection; resumable; renders `eval/results.md`. |
 | **Inference service** (`inference/`) | FastAPI + Redis-Streams queue + GPU worker. Content-hash dedupe, micro-batching, OOM batch splitting, crash recovery, disk spool when Redis is down, `/healthz`, `/metrics`, JSON logs. |
-| **Telegram bot** (`bot/`) | Core done: Jalali-month quota, rate limiting, credit ledger with refunds, stub payments, Persian texts. **Handlers and end-to-end flow are the next task.** |
+| **Telegram bot** (`bot/`) | Working end to end: photo (or image file) in → PNG cutout out, albums, Jalali-month quota, rate limiting, credit ledger with refunds, stub payments, Persian UI, deferred delivery that survives a restart. Verified against a mock Bot API — **no token exists yet** (H-004). |
 | **Persian text** (`common/`) | ZWNJ (نیم‌فاصله) repair, ی/ک normalization, digit forms, bidi handling for mixed LTR/RTL, validation. 100% line coverage. |
 | **Listing generator** | Not started (next after the bot). Local LLM over an OpenAI-compatible llama.cpp server. |
 | **Economics model** | Not started — blocked on clean speed numbers (see below). |
@@ -85,6 +85,18 @@ make setup                    # Windows: .\make.cmd setup
 | `make up` / `make down` | docker compose |
 
 On Windows without GNU make, use `.\make.cmd <target>` — it runs the same `tools/tasks.py` code.
+
+## Seeing the bot work, without a Telegram token
+
+```bash
+python tools/e2e_demo.py --image <any product photo>     # real model, real queue, mock Telegram
+```
+
+Drives the production path — handlers → service → API → queue → GPU worker → blob store → delivery —
+with only Telegram's HTTP layer faked. On the dev laptop (GTX 1650, `birefnet_lite`): **18 s for the
+first photo** (cold model load) and **1.3 s end to end** for the next one. `bot/tests/test_e2e_bot.py`
+runs the same wiring with a CPU stand-in model, including albums, quota exhaustion, rate limiting,
+refunds on failure, and deferred delivery.
 
 ## Benchmarking on a Kaggle GPU
 
