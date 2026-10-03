@@ -65,7 +65,7 @@
   <h1>حذف پس‌زمینه عکس محصول</h1>
   <p class="sub">عکس محصول را بفرستید تا نسخه‌ی بدون پس‌زمینه را بگیرید. ثبت‌نام لازم نیست.</p>
 
-  <div class="offline" id="offline">ارتباط با سرویس برقرار نیست. عکس‌ها در صف می‌مانند و پس از وصل شدن ارسال می‌شوند.</div>
+  <div class="offline" id="offline"></div>
 
   <div class="panel">
     <div id="drop" tabindex="0" role="button" aria-label="انتخاب عکس">
@@ -103,9 +103,34 @@ const dropEl = document.getElementById("drop");
 const fileEl = document.getElementById("file");
 const offlineEl = document.getElementById("offline");
 
-const setOffline = (on) => { offlineEl.style.display = on ? "block" : "none"; };
-window.addEventListener("online", () => setOffline(false));
-window.addEventListener("offline", () => setOffline(true));
+// Three different problems, three different messages. "Can't reach the service" is not the same
+// as "you are offline", and a page opened straight from disk needs to be told where the API is.
+const MSG = {
+  browser: "اینترنت دستگاه شما قطع است. عکس‌ها پس از وصل شدن ارسال می‌شوند.",
+  api: "سرویس پردازش در دسترس نیست. اگر روی رایانه‌ی خودتان اجرا می‌کنید، دستور <code>python tools/serve_demo.py</code> را اجرا کنید.",
+  file: "این صفحه مستقیم از روی فایل باز شده و آدرس سرویس را نمی‌داند. آن را از خود سرویس باز کنید (<code>http://127.0.0.1:8000/</code>) یا <code>?api=http://127.0.0.1:8000</code> را به انتهای آدرس اضافه کنید.",
+};
+function setOffline(kind) {
+  if (!kind) { offlineEl.style.display = "none"; return; }
+  offlineEl.innerHTML = MSG[kind] || MSG.api;
+  offlineEl.style.display = "block";
+}
+window.addEventListener("online", () => setOffline(null));
+window.addEventListener("offline", () => setOffline("browser"));
+
+// Tell the seller up front whether the service is reachable, instead of only after a failed upload.
+(async function probe() {
+  if (!navigator.onLine) return setOffline("browser");
+  if (!API && location.protocol === "file:") return setOffline("file");
+  try {
+    const r = await fetch(API + "/healthz", { cache: "no-store" });
+    const h = await r.json();
+    if (h.status === "down") return setOffline("api");
+    setOffline(null);
+  } catch {
+    setOffline(location.protocol === "file:" ? "file" : "api");
+  }
+})();
 
 dropEl.addEventListener("click", () => fileEl.click());
 dropEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") fileEl.click(); });
@@ -155,10 +180,10 @@ async function upload(file) {
   try {
     res = await fetch(API + "/v1/matting", { method: "POST", body });
   } catch {
-    setOffline(true);
-    return ui.status("ارتباط برقرار نشد. اتصال اینترنت را بررسی کنید.", "err");
+    setOffline(navigator.onLine ? "api" : "browser");
+    return ui.status("ارتباط با سرویس برقرار نشد.", "err");
   }
-  setOffline(false);
+  setOffline(null);
   const data = await res.json().catch(() => ({}));
   if (!res.ok && res.status !== 202) {
     return ui.status(ERRORS[data.error] || data.message || "خطا در پردازش", "err");
@@ -176,9 +201,9 @@ async function poll(jobId, ui, name) {
       const r = await fetch(`${API}/v1/jobs/${jobId}`);
       if (r.status === 404) return ui.status("این درخواست پیدا نشد.", "err");
       job = await r.json();
-      setOffline(false);
+      setOffline(null);
     } catch {
-      setOffline(true);               // keep polling: the job is safe in the queue
+      setOffline(navigator.onLine ? "api" : "browser");  // keep polling: the job is safe in the queue
       await sleep(2000);
       continue;
     }

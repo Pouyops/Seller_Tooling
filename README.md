@@ -108,6 +108,18 @@ few-shot example verbatim (example moved to an unrelated category), pad descript
 sentence (detected → one rewrite), and invent claims (prompt forbids medical/chemical claims; a native
 speaker still needs to review — H-013).
 
+## Trying it in a browser
+
+```bash
+python tools/serve_demo.py        # API + GPU worker + web page in one process, no Docker
+# then open http://127.0.0.1:8000/
+```
+
+`make serve` is the real layout (separate API and worker, Valkey as the queue). `serve_demo.py` is the
+convenience version for a laptop: if no Redis/Valkey is reachable it runs the queue in-process and says
+so. Opening `web/index.html` straight from disk will *not* work — the page has no API to talk to, and it
+now says exactly that instead of blaming your internet connection.
+
 ## Seeing the bot work, without a Telegram token
 
 ```bash
