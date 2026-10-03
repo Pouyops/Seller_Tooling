@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-03 14:28:19",
+  "created_at": "2026-10-03 15:32:35",
   "model": "birefnet_lite",
   "max_batch": 4,
   "mode": "standalone",
@@ -24,18 +24,43 @@
       "requests": 32,
       "completed": 32,
       "failed": 0,
-      "wall_s": 96.08,
-      "throughput_img_s": 0.333,
+      "wall_s": 97.56,
+      "throughput_img_s": 0.328,
       "submit_ms": {
-        "p50": 213.5627999996359,
-        "p90": 365.99459999888495,
-        "p99": 383.7468000001536
+        "p50": 215.91020000050776,
+        "p90": 613.6186000003363,
+        "p99": 2473.1830000018817
       },
       "end_to_end_ms": {
-        "p50": 8435.347200000251,
-        "p90": 23389.571700001397,
-        "p99": 24249.366299998655,
-        "max": 24249.366299998655
+        "p50": 9442.9283999998,
+        "p90": 20536.188199999742,
+        "p99": 21361.704900002223,
+        "max": 21361.704900002223
+      },
+      "status_codes": {
+        "202": 32
+      },
+      "errors": [],
+      "notes": []
+    },
+    {
+      "scenario": "burst",
+      "concurrency": 4,
+      "requests": 32,
+      "completed": 32,
+      "failed": 0,
+      "wall_s": 95.31,
+      "throughput_img_s": 0.336,
+      "submit_ms": {
+        "p50": 1238.2934000015666,
+        "p90": 1931.5557000008994,
+        "p99": 2076.9567000024836
+      },
+      "end_to_end_ms": {
+        "p50": 59666.37239999909,
+        "p90": 94125.49600000057,
+        "p99": 95151.37790000153,
+        "max": 95151.37790000153
       },
       "status_codes": {
         "202": 32
@@ -49,18 +74,18 @@
       "requests": 32,
       "completed": 32,
       "failed": 0,
-      "wall_s": 116.86,
-      "throughput_img_s": 0.274,
+      "wall_s": 87.41,
+      "throughput_img_s": 0.366,
       "submit_ms": {
-        "p50": 242.96750000030443,
-        "p90": 387.52759999988484,
-        "p99": 480.5785000007745
+        "p50": 224.93419999955222,
+        "p90": 340.91669999907026,
+        "p99": 382.67659999837633
       },
       "end_to_end_ms": {
-        "p50": 11124.541200000749,
-        "p90": 23235.205400000268,
-        "p99": 67308.86540000029,
-        "max": 67308.86540000029
+        "p50": 2382.497800001147,
+        "p90": 20289.532400001917,
+        "p99": 69468.03550000186,
+        "max": 69468.03550000186
       },
       "status_codes": {
         "202": 32
@@ -70,11 +95,46 @@
         "worker stopped after 10/32 completions",
         "worker restarted after 15s outage with 22 jobs outstanding"
       ]
+    },
+    {
+      "scenario": "dedupe",
+      "concurrency": 4,
+      "requests": 8,
+      "completed": 8,
+      "failed": 0,
+      "wall_s": 0.26,
+      "throughput_img_s": 30.389,
+      "submit_ms": {
+        "p50": 131.5734000017983,
+        "p90": 170.57939999722294,
+        "p99": 176.09639999864157
+      },
+      "end_to_end_ms": {
+        "p50": 131.63150000036694,
+        "p90": 170.62929999883636,
+        "p99": 176.16819999966538,
+        "max": 176.16819999966538
+      },
+      "status_codes": {
+        "200": 8
+      },
+      "errors": [],
+      "notes": [
+        "cache warmed with 8 images (cold p50 16012 ms)"
+      ]
     }
   ],
   "caveats": [
     "No Redis/Valkey server was reachable, so the queue ran in-process (fakeredis). Queue semantics are the same, but there is no network hop, no fsync and no cross-process contention \u2014 real deployments will be somewhat slower.",
     "Client and server share one machine, so client CPU competes with preprocessing."
   ],
+  "stage_breakdown": {
+    "decode": 18.878699998822412,
+    "inference": 577.4112999988574,
+    "encode_png": 192.58225000157836,
+    "encode_mask": 21.000699998694472,
+    "store": 2.993350000906503,
+    "store_fsync_alt": 144.58155000102124
+  },
   "queue": "in-process (fakeredis)"
 }
