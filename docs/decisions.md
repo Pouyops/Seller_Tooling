@@ -98,6 +98,20 @@ ones ship with the defect recorded in `issues`.
 **Alternative.** Retry until success (unbounded latency), or trust the grammar-constrained decoding alone
 (it guarantees JSON shape, not Persian quality — measured: it happily produced English inside valid JSON).
 
+## ADR-013 — Serve PyTorch; ONNX/TensorRT stays an experiment
+**Context.** The brief asks for "ONNX export plus TensorRT where it helps". Measured
+(`docs/onnx-tensorrt.md`): both models fail to export on this toolchain — BiRefNet because
+`torchvision::deform_conv2d` has no ONNX symbolic (and the MIT helper that adds one breaks against
+torch 2.11), InSPyReNet because PyTorch's own ONNX shape inference hits an internal assert. Swin's
+window arithmetic defeats the dynamo exporter for both.
+**Decision.** Serve PyTorch. Keep `python -m st_inference.export` in the repo as the script to run in a
+pinned side-environment (torch 2.5.1, as BiRefNet's own requirements specify) when someone wants the
+artifact. TensorRT is not evaluated, because there is no ONNX graph to feed it — saying anything about
+its speed here would be invention.
+**Consequences.** One less runtime and one less proprietary licence (NVIDIA SLA, H-002) in the stack.
+The measured upside was limited anyway: inference is 64% of the pipeline, so pipelining CPU
+encode/store is worth about as much as a 2× faster inference engine and needs no new toolchain.
+
 ## ADR-012 — Persian costs ~2 tokens per character: budget accordingly
 **Context.** The first real run returned `finish_reason=length` with a 700-token cap: the model had
 produced only 370 characters of Persian. Measured on Qwen3.5: a ~400-character listing is ~960 tokens.

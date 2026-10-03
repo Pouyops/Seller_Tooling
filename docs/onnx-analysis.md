@@ -1,0 +1,49 @@
+## Analysis
+
+**Conclusion: ONNX export does not help today, and TensorRT was never reachable. Stay on PyTorch.**
+The service already runs PyTorch, so nothing is blocked — but here is exactly where the export breaks,
+so the next person doesn't rediscover it.
+
+### What failed, precisely
+
+| model | exporter | failure |
+|---|---|---|
+| `birefnet_lite` | dynamo (`torch.export`) | graph capture fails at step 1/3 |
+| `birefnet_lite` | TorchScript | `torchvision::deform_conv2d` has no ONNX symbolic in torchvision 0.26 |
+| `birefnet_lite` | TorchScript + `deform-conv2d-onnx-exporter` (MIT) | gets past deform_conv2d, then `unsupported operand type(s) for +: 'NoneType' and 'int'` inside the helper's symbolic — it was written against an older PyTorch and gets `None` where it expects a static dimension |
+| `inspyrenet_fast` | dynamo | graph capture fails at step 1/3 |
+| `inspyrenet_fast` | TorchScript | `minus_one_pos != -1 INTERNAL ASSERT FAILED` in PyTorch's own ONNX shape inference |
+
+Both models are Swin-based, and Swin's windowed attention does shape arithmetic that both exporters
+struggle with. BiRefNet additionally uses deformable convolutions in its decoder.
+
+**TensorRT was therefore never exercised.** ONNX Runtime 1.30 advertises `TensorrtExecutionProvider`
+on this box, but with no ONNX graph there is nothing to feed it. Any claim about TensorRT speedups
+here would be invented.
+
+### Why this is not worth forcing right now
+
+1. **The upstream toolchain disagrees with ours.** BiRefNet's own `requirements.txt` pins
+   `torch==2.5.1`; we serve on torch 2.11 for the CUDA 12.8 build that this GPU needs. The documented
+   export path works in that older pin, not in ours.
+2. **The gain is capped by something else.** The load test showed inference is 64% of the pipeline and
+   CPU encode/store is 36% (`docs/loadtest.md`). Even a generous 2× inference win from TensorRT would
+   cut end-to-end cost by roughly a quarter — while pipelining the CPU work, which needs no new
+   toolchain, was worth about as much in the economics model.
+3. **It adds a licence and an export-control surface.** TensorRT ships under NVIDIA's proprietary SLA
+   with export-compliance clauses (`docs/licenses.md`), which matters here (H-002).
+
+### If someone wants to revisit
+
+In this order, cheapest first:
+
+1. **Pipeline the CPU work** (encode/store overlapping inference). No new dependency; the economics
+   model already shows it beating a 3× faster GPU.
+2. **Export in a pinned side-environment** — `torch==2.5.1`, matching torchvision,
+   `deform-conv2d-onnx-exporter` — purely to produce the `.onnx` file, then serve it with ONNX Runtime.
+   The exported artifact does not care which torch made it. `python -m st_inference.export` is the
+   script to run there.
+3. **Try `torch-tensorrt`** (compiles from PyTorch directly, no ONNX in the middle), which sidesteps
+   both failures above.
+4. Only then measure whether TensorRT beats PyTorch on the *target* 24 GB card. On a T4, `birefnet_lite`
+   fp16 already does 7.8 img/s, which is far beyond current demand.

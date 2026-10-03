@@ -51,7 +51,7 @@ common/      st_common    Persian text, licence guard, job queue, blob store, ma
 inference/   st_inference FastAPI API, GPU worker, model adapters/registry, imaging
 bot/         st_bot       Telegram bot (aiogram): quota, ledger, payments stub, Persian UI
 eval/        st_eval      synthetic benchmark generator, metrics, bench runner, report
-web/                      (placeholder) RTL upload page
+web/         index.html   RTL seller page (no framework, no CDN), served by the API at /
 infra/                    docker-compose (Valkey, Prometheus, optional GPU/bot/llm profiles)
 docs/                     licenses.md · decisions.md (ADRs) · dataset-gap.md · economics.md (todo)
 tools/tasks.py            the real task runner behind `make`
@@ -152,11 +152,11 @@ Nothing machine-specific is in git. After cloning:
 
 ### Next tasks, in order
 
-1. Bot handlers + end-to-end flow against the local mock Bot API server (no Telegram token needed).
-2. `--speed-only` re-measurement of all models on an idle machine, then write `eval/analysis.md`.
-3. Persian listing generator (Qwen3.5-4B or Gemma-4-E4B GGUF via llama.cpp, both Apache-2.0).
-4. ONNX export + TensorRT trial; load test with real numbers → `docs/loadtest.md`.
-5. `docs/economics.md` from the measured throughput.
+1. Get a real Telegram token (H-004) and point the bot at it — everything else is done and tested.
+2. Verify the economics price inputs (H-014) and re-run `make economics`.
+3. Pipeline CPU encode/store behind GPU inference: worth more than a faster GPU (`docs/economics.md` §4).
+4. Real benchmark photos (H-005), then re-run `make bench` and compare rankings against the synthetic set.
+5. A native Persian speaker reviews ~50 generated listings (H-013) before the listing feature ships.
 
 ## Ground rules this repo follows
 
