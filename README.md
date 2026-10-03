@@ -73,11 +73,32 @@ make setup                    # Windows: .\make.cmd setup
 | `make test` | unit tests (no GPU, no weights, no network) |
 | `make bench` | full model comparison → `eval/results.md` (resumable; GPU) |
 | `make bench-quick` | 2 models × 24 images smoke check |
+| `make bench-kaggle` | run the benchmark on a free Kaggle T4 (16 GB) and fetch the results |
 | `make serve` | Valkey + inference API + GPU worker |
 | `make bot` | Telegram bot (needs `ST_TELEGRAM_TOKEN`) |
 | `make up` / `make down` | docker compose |
 
 On Windows without GNU make, use `.\make.cmd <target>` — it runs the same `tools/tasks.py` code.
+
+## Benchmarking on a Kaggle GPU
+
+The dev laptop's GTX 1650 (4 GB) can't answer the questions that matter: batches larger than 1 spill
+into system RAM, and fp16 returns NaN on that chip. A free Kaggle kernel gives a **Tesla T4 (14.6 GB,
+Linux)** — real batch sweeps, real OOM, and working fp16 tensor cores.
+
+```bash
+python tools/kaggle_bench.py push     # private kernel, clones this repo at your current HEAD
+python tools/kaggle_bench.py status --wait 90
+python tools/kaggle_bench.py fetch    # -> eval/runs/kaggle-synth-v1-s1403-n200/
+python -m st_eval.report eval/runs/kaggle-synth-v1-s1403-n200 --out eval/results.md
+```
+
+Credentials: a classic `~/.kaggle/kaggle.json` (username + key), or `KAGGLE_USERNAME`/`KAGGLE_KEY`.
+
+> **Note for Iran:** `api.kaggle.com` — the host the modern `kaggle` CLI uses — is network-blocked
+> (403 from Google's frontend), which also makes the newer `KGAT_…` tokens unusable, since the CLI
+> validates them against that host. The **legacy REST API at `www.kaggle.com/api/v1` is reachable**,
+> so `tools/kaggle_bench.py` talks to it directly and doesn't use the CLI at all. See H-009.
 
 ## Continuing on another machine (or a cloud session)
 

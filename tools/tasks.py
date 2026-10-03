@@ -7,6 +7,8 @@ Targets
   test-all     unit + GPU/weights integration tests
   bench        full model comparison -> eval/results.md (resumable)
   bench-quick  2 models x 24 images, for a smoke check
+  bench-kaggle run the benchmark on a Kaggle T4 and pull results back
+               (`bench-kaggle push|status|fetch`; needs ~/.kaggle/kaggle.json)
   serve        start Valkey (docker), the inference API and a GPU worker
   worker       run only a GPU worker
   api          run only the API
@@ -203,6 +205,7 @@ def main(argv: list[str]) -> None:
         "test-all": lambda: t_test(True),
         "bench": lambda: t_bench(rest),
         "bench-quick": t_bench_quick,
+        "bench-kaggle": lambda: sh([PY, str(ROOT / "tools" / "kaggle_bench.py"), *(rest or ["push"])]),
         "report": t_report,
         "weights": lambda: t_weights(rest or None),
         "dataset": t_dataset,

@@ -87,6 +87,33 @@ and green-light a Bale adapter as the next channel.
 
 ---
 
+## H-009 — Benchmarking on Kaggle GPUs (US-hosted compute)
+**Status:** WORKAROUND-IN-PLACE — working, but it is the same risk family as H-002
+
+The dev laptop has a GTX 1650 (4 GB). Kaggle gives 2× Tesla T4 (14.6 GB each, Linux), which is close
+enough to the 24 GB target to produce meaningful batch sweeps and a real fp16 answer.
+`tools/kaggle_bench.py` pushes a **private** kernel that clones the public repo at a pinned commit,
+rebuilds the benchmark set from its seed, and returns the result JSON.
+
+Two findings worth recording:
+- **`api.kaggle.com` is blocked from here** (403 from Google's frontend), so the current `kaggle` CLI
+  cannot authenticate at all — including the newer `KGAT_…` tokens, which it validates against that
+  host. The **legacy REST API at `www.kaggle.com/api/v1` works** with a classic username + key, so
+  the tool speaks to that directly and does not depend on the CLI.
+- Measurements still come from US-hosted infrastructure under a Google-owned ToS, with an account
+  that could be restricted at any time.
+
+- **Option A:** Keep Kaggle for development benchmarking only; never in the production path.
+- **Option B:** Rent a real 3090/4090 (RunPod, Vast.ai) for one afternoon and close H-001 properly.
+  Needs a payment method that works from Iran.
+- **Option C:** Buy/borrow the target card.
+
+**Recommendation:** A now (free, works today), B before pricing is finalised, since Kaggle's T4 still
+isn't the target card. Keep production inference on hardware the company controls.
+**Blocks:** nothing immediately; H-001 stays open until B or C.
+
+---
+
 ## H-005 — Real benchmark images (and the rights to use them)
 **Status:** WORKAROUND-IN-PLACE (synthetic proxy set; see `docs/dataset-gap.md`)
 
