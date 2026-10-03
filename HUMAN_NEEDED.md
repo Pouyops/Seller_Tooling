@@ -114,6 +114,72 @@ isn't the target card. Keep production inference on hardware the company control
 
 ---
 
+## H-010 — Payment gateway for the paid tier
+**Status:** OPEN — stub only, per the brief
+
+`bot/st_bot/payments.py` defines the `PaymentProvider` seam and a stub that creates invoices and
+never takes money. Nothing real is integrated and no account was registered.
+
+- **Option A:** An Iranian PSP (Zarinpal, Zibal, IDPay, NextPay). Works with Iranian bank cards
+  (شتاب), needs a registered business, and each has its own verification callback.
+- **Option B:** Card-to-card with manual confirmation. Zero integration, awful at scale, common
+  in small Iranian shops.
+- **Option C:** Telegram Payments. Not usable here — its providers don't serve Iranian cards.
+
+**Recommendation:** A, choosing the PSP by which one onboards your business entity fastest; keep the
+stub's "credit exactly once per invoice id" semantics, since PSP callbacks retry.
+**Blocks:** charging anyone. The free tier works without it.
+
+---
+
+## H-011 — Price points for the credit packs
+**Status:** OPEN — placeholder numbers in code
+
+`PACKS` currently reads 49k/149k/490k toman for 50/200/1000 images. Those are placeholders I invented
+to exercise the UI, not a pricing recommendation. `docs/economics.md` (next deliverable) will give the
+cost floor from measured throughput; the price above it is a business decision about what Iranian
+sellers will pay, which I can't derive from benchmarks.
+**Blocks:** nothing technically; the numbers must not reach real users as-is.
+
+---
+
+## H-012 — Marketplace field limits and category taxonomies
+**Status:** OPEN — conservative guesses in code
+
+`inference/st_inference/listing/schema.py` caps titles at 70 characters, descriptions at 900 and
+keywords at 12. Those are my conservative guesses. Digikala, Basalam and Torob each have their own
+limits, required attributes per category, and title conventions; getting them wrong means rejected
+listings.
+
+- **Option A:** Read the limits from each seller panel (needs a seller account on each) and encode
+  them per marketplace.
+- **Option B:** Ask early users to paste a rejection message when one happens, and learn the rules.
+
+**Recommendation:** A for the two that matter (Digikala, Basalam) — an afternoon of someone with
+accounts. It also feeds the per-marketplace prompt.
+**Blocks:** confident "ready to paste into Digikala" claims.
+
+---
+
+## H-013 — Which LLM, and who checks the Persian
+**Status:** WORKAROUND-IN-PLACE (Qwen3.5-2B on the dev box)
+
+The listing generator runs Qwen3.5-2B (Apache-2.0) because the dev GPU has 4 GB. It produces valid,
+normalized Persian, but measurably weak writing: it padded a description with a repeated sentence
+(now caught and retried), invented a pseudo-scientific claim for saffron ("جاذبه شیمیایی"), and copied
+a same-category few-shot example almost verbatim until I changed the example's category.
+
+- **Option A:** Qwen3.5-9B or Gemma-4-12B (both Apache-2.0) on the 24 GB target. Roughly 5–6 GB at
+  4-bit, leaving room beside the matting model.
+- **Option B:** Keep a small model and lean harder on templates.
+
+**Recommendation:** A, and then **a native Persian speaker reviews ~50 generated listings** before any
+of this reaches sellers. I can measure that the text is valid Persian; I cannot judge whether it reads
+like a competent Iranian seller wrote it, and no automated metric settles that.
+**Blocks:** turning the listing generator on for real users.
+
+---
+
 ## H-005 — Real benchmark images (and the rights to use them)
 **Status:** WORKAROUND-IN-PLACE (synthetic proxy set; see `docs/dataset-gap.md`)
 

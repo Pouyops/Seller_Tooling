@@ -27,10 +27,21 @@ class ServiceSettings(CommonSettings):
     max_pixels: int = 40_000_000
     max_side: int = 4096
 
-    # queue semantics
-    visibility_timeout_ms: int = 300_000
+    # Results are derived artifacts: if a power cut loses one, the job is simply re-run, and the API
+    # already answers 410 for a missing blob. fsync costs 174 ms/image here vs 2 ms without (measured,
+    # docs/loadtest.md). Uploaded originals are always fsync'ed — those cannot be recomputed.
+    blob_fsync_results: bool = False
+
+    # queue semantics. Worst-case recovery after a worker dies is one visibility timeout, so keep it
+    # a small multiple of the slowest expected inference, not minutes (docs/loadtest.md, outage run).
+    visibility_timeout_ms: int = 60_000
     max_attempts: int = 3
     max_wait_s: float = 30.0
+
+    # local LLM for listing generation (llama.cpp server speaking the OpenAI protocol)
+    llm_base_url: str = "http://localhost:8080/v1"
+    llm_model: str = "local"
+    llm_timeout_s: float = 180.0
 
     # worker
     worker_metrics_port: int = 9101

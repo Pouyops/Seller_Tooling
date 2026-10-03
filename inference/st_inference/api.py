@@ -35,6 +35,8 @@ from st_common.logs import bind_context, get_logger, setup_logging
 from st_common.storage import BlobStore
 
 from .imaging import ImageRejected, parse_background, probe_image
+from .listing import ListingGenerator, SellerFields
+from .listing.llm_client import LocalLLM
 from .settings import ServiceSettings, get_settings
 from .spool import Spool
 
@@ -44,6 +46,8 @@ HTTP_REQUESTS = Counter("st_api_requests_total", "HTTP requests", ["route", "met
 HTTP_LATENCY = Histogram("st_api_request_seconds", "HTTP request latency", ["route"],
                          buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30))
 JOBS_SUBMITTED = Counter("st_api_jobs_submitted_total", "Job submissions", ["model", "outcome"])
+LISTINGS = Counter("st_api_listings_total", "Listing generations", ["source"])
+LISTING_SECONDS = Histogram("st_api_listing_seconds", "Listing generation time", buckets=(1, 2, 5, 10, 20, 40, 80, 160))
 QUEUE_JOBS = Gauge("st_queue_jobs", "Jobs in the queue by state", ["kind", "state"])
 REDIS_UP = Gauge("st_redis_up", "1 if the API can reach Redis/Valkey")
 WORKERS = Gauge("st_workers", "Workers with a fresh heartbeat, by state", ["state"])
@@ -59,6 +63,8 @@ class ApiState:
     queue: JobQueue
     blobs: BlobStore
     spool: Spool
+    llm: LocalLLM
+    listings: ListingGenerator
     redis_ok: bool = False
     own_redis: bool = False
 
@@ -122,6 +128,8 @@ def create_app(settings: ServiceSettings | None = None, redis_client=None, confi
         st.queue = JobQueue(st.redis, visibility_timeout_ms=s.visibility_timeout_ms, max_attempts=s.max_attempts)
         st.blobs = BlobStore(s.blobs_dir)
         st.spool = Spool(s.data_dir)
+        st.llm = LocalLLM(s.llm_base_url, s.llm_model, timeout_s=s.llm_timeout_s)
+        st.listings = ListingGenerator(st.llm)
         stop = asyncio.Event()
         task = asyncio.create_task(_housekeeping(st, stop))
         log.info("api.started", extra={"redis_url": s.redis_url, "data_dir": str(s.data_dir), "default_model": s.matting_model})
@@ -134,6 +142,7 @@ def create_app(settings: ServiceSettings | None = None, redis_client=None, confi
                     await task
             except (TimeoutError, asyncio.CancelledError, RedisError, OSError):
                 task.cancel()
+            await st.llm.aclose()
             if st.own_redis:
                 await st.redis.aclose()
 
@@ -274,6 +283,58 @@ def create_app(settings: ServiceSettings | None = None, redis_client=None, confi
     @app.get("/v1/jobs/{job_id}/mask")
     async def get_mask(job_id: str):
         return await _blob_response(job_id, "mask_key", "image/png")
+
+    @app.post("/v1/listing")
+    async def listing(
+        request: Request,
+        file: UploadFile | None = File(None),
+        category: str = Form(""),
+        brand: str = Form(""),
+        model: str = Form(""),
+        material: str = Form(""),
+        color: str = Form(""),
+        size: str = Form(""),
+        weight: str = Form(""),
+        origin: str = Form(""),
+        condition: str = Form(""),
+        notes: str = Form(""),
+        price_toman: int | None = Form(None),
+        marketplace: str = Form("digikala"),
+    ):
+        """Image + seller fields -> Persian title/description/attributes/keywords.
+
+        Synchronous: the LLM server has its own queue, and a seller is waiting. If it is unreachable
+        the response is still 200 with a template listing built from the seller's fields and
+        ``source: "template_fallback"`` — never an empty listing.
+        """
+        image: bytes | None = None
+        if file is not None:
+            limit = int(s.max_upload_mb * 2**20)
+            data = await file.read(limit + 1)
+            if len(data) > limit:
+                return err(413, "too_large", f"upload exceeds {s.max_upload_mb} MB")
+            if data:
+                try:
+                    probe_image(data, s.max_pixels)
+                except ImageRejected as e:
+                    return err(415 if e.code in ("not_an_image", "unsupported_format") else 422, e.code, str(e))
+                image = data
+        fields = SellerFields(category=category, brand=brand, model=model, material=material, color=color,
+                              size=size, weight=weight, origin=origin, condition=condition, notes=notes,
+                              price_toman=price_toman, marketplace=marketplace)
+        result = await st.listings.generate(image, fields)
+        LISTINGS.labels(result.source).inc()
+        LISTING_SECONDS.observe(result.latency_ms / 1000)
+        log.info("listing.generated", extra={"source": result.source, "ms": round(result.latency_ms),
+                                             "issues": result.issues, "has_image": image is not None})
+        return JSONResponse({
+            "listing": result.listing.model_dump(),
+            "source": result.source,
+            "issues": result.issues,
+            "attempts": result.attempts,
+            "latency_ms": round(result.latency_ms, 1),
+            "model": result.model,
+        })
 
     @app.get("/healthz")
     async def healthz():

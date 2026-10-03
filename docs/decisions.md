@@ -77,3 +77,31 @@ RAM rather than raising OOM. BiRefNet_HR at 2048² "fit" in 4 GB at 28 s/image.
 category-balanced image cap (`birefnet_hr#24`), and the report marks them partial.
 **Alternative.** Disable sysmem fallback in the NVIDIA control panel (system setting; not changed by me)
 or run on Linux, where OOM is raised normally.
+
+## ADR-010 — Listing generation is synchronous; cutouts stay queued
+**Context.** Cutouts are GPU-bound and bursty, so they need a queue. Listing generation calls a separate
+`llama-server` process that already queues internally, and a seller is sitting there waiting for text.
+**Decision.** `POST /v1/listing` runs inline and returns the listing. Matting keeps the Redis-Streams queue.
+**Consequences.** One fewer moving part; a slow LLM shows up as a slow request, not a stuck job. If
+listing volume ever rivals cutout volume, it moves onto the same queue with `kind="listing"` — the
+queue code is already kind-agnostic.
+
+## ADR-011 — Validate-and-repair, then a deterministic template
+**Context.** A small local model will sometimes emit broken JSON, English, or padded repetition, and a
+seller must never be shown an empty or mangled listing.
+**Decision.** Parse → normalize every string through `st_common.persian` → validate → classify issues as
+**fatal** (bad JSON, English, mojibake), **repairable** (repetition, over-long title, too few keywords) or
+cosmetic. Fatal and repairable issues earn exactly one rewrite request naming the problems in Persian;
+after that, fatal issues fall back to a template built from the seller's own fields, while repairable
+ones ship with the defect recorded in `issues`.
+**Consequences.** Every response is valid Persian, and `source` says honestly whether a model wrote it.
+**Alternative.** Retry until success (unbounded latency), or trust the grammar-constrained decoding alone
+(it guarantees JSON shape, not Persian quality — measured: it happily produced English inside valid JSON).
+
+## ADR-012 — Persian costs ~2 tokens per character: budget accordingly
+**Context.** The first real run returned `finish_reason=length` with a 700-token cap: the model had
+produced only 370 characters of Persian. Measured on Qwen3.5: a ~400-character listing is ~960 tokens.
+**Decision.** Default `max_tokens=1500` for listing calls, and downscale the product photo to 768 px
+before encoding it (a full-size photo was ~1500 prompt tokens and most of the latency).
+**Consequences.** Latency dropped from ~40 s to ~20 s per listing on the dev GPU, and truncation stopped.
+This ratio also matters for costing: Persian output is roughly twice as expensive per character as English.

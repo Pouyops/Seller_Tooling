@@ -19,7 +19,7 @@ nothing that can be geo-blocked at runtime.** Target deployment is a single 24 G
 | **Inference service** (`inference/`) | FastAPI + Redis-Streams queue + GPU worker. Content-hash dedupe, micro-batching, OOM batch splitting, crash recovery, disk spool when Redis is down, `/healthz`, `/metrics`, JSON logs. |
 | **Telegram bot** (`bot/`) | Working end to end: photo (or image file) in → PNG cutout out, albums, Jalali-month quota, rate limiting, credit ledger with refunds, stub payments, Persian UI, deferred delivery that survives a restart. Verified against a mock Bot API — **no token exists yet** (H-004). |
 | **Persian text** (`common/`) | ZWNJ (نیم‌فاصله) repair, ی/ک normalization, digit forms, bidi handling for mixed LTR/RTL, validation. 100% line coverage. |
-| **Listing generator** | Not started (next after the bot). Local LLM over an OpenAI-compatible llama.cpp server. |
+| **Listing generator** (`inference/st_inference/listing/`) | Working: product photo + seller fields → Persian title, description, attributes, keywords. Local Qwen3.5-2B (Apache-2.0) over llama.cpp; validate-and-repair with a deterministic fallback so a listing is never empty. Model quality needs a bigger model and a native-speaker review (H-013). |
 | **Economics model** | Not started — blocked on clean speed numbers (see below). |
 
 ### Measured results (Tesla T4 16 GB, synthetic set, 200 images) — full tables in [`eval/results.md`](eval/results.md)
@@ -85,6 +85,26 @@ make setup                    # Windows: .\make.cmd setup
 | `make up` / `make down` | docker compose |
 
 On Windows without GNU make, use `.\make.cmd <target>` — it runs the same `tools/tasks.py` code.
+
+## Persian listing generator
+
+```bash
+python -m st_inference.listing.llm_server                  # llama.cpp + Qwen3.5-2B (vision)
+python tools/listing_demo.py --image <photo> --preset carpet
+curl -F file=@photo.jpg -F category=زعفران -F brand=سحرخیز http://localhost:8000/v1/listing
+```
+
+Real output from the carpet photo above (Qwen3.5-2B on a GTX 1650, 19.6 s, first attempt):
+
+> **عنوان:** فرش دستباف طرح هندسی کاشان پشمی لاکی بدون لک پارگی ۱۲ متری
+> **توضیحات:** فرش دستباف با طرح ستاره‌ای و رنگ‌های جذاب، با جنس پشم طبیعی و رنگ لاکی. تولید شده در کاشان با ضمانت عدم لک و پارگی.
+
+Every string is normalized (ZWNJ, ی/ک, digit forms) and validated as Persian before a seller sees it.
+Output is classified as `model`, `model_repaired` or `template_fallback`, so you always know whether a
+model actually wrote it. Three defects seen in testing and handled: small models copy a same-category
+few-shot example verbatim (example moved to an unrelated category), pad descriptions with a repeated
+sentence (detected → one rewrite), and invent claims (prompt forbids medical/chemical claims; a native
+speaker still needs to review — H-013).
 
 ## Seeing the bot work, without a Telegram token
 

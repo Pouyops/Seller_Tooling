@@ -1,0 +1,80 @@
+{
+  "created_at": "2026-10-03 14:28:19",
+  "model": "birefnet_lite",
+  "max_batch": 4,
+  "mode": "standalone",
+  "hardware": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.3",
+    "cpu": "Intel64 Family 6 Model 158 Stepping 10, GenuineIntel",
+    "cpu_cores_logical": 12,
+    "ram_gb": 15.8,
+    "torch": "2.11.0+cu128",
+    "cuda_runtime": "12.8",
+    "gpu": "NVIDIA GeForce GTX 1650",
+    "gpu_vram_gb": 4.0,
+    "gpu_capability": "7.5",
+    "nvidia_driver": "616.64",
+    "os": "Windows-10-10.0.26200-SP0"
+  },
+  "scenarios": [
+    {
+      "scenario": "steady",
+      "concurrency": 4,
+      "requests": 32,
+      "completed": 32,
+      "failed": 0,
+      "wall_s": 96.08,
+      "throughput_img_s": 0.333,
+      "submit_ms": {
+        "p50": 213.5627999996359,
+        "p90": 365.99459999888495,
+        "p99": 383.7468000001536
+      },
+      "end_to_end_ms": {
+        "p50": 8435.347200000251,
+        "p90": 23389.571700001397,
+        "p99": 24249.366299998655,
+        "max": 24249.366299998655
+      },
+      "status_codes": {
+        "202": 32
+      },
+      "errors": [],
+      "notes": []
+    },
+    {
+      "scenario": "outage",
+      "concurrency": 4,
+      "requests": 32,
+      "completed": 32,
+      "failed": 0,
+      "wall_s": 116.86,
+      "throughput_img_s": 0.274,
+      "submit_ms": {
+        "p50": 242.96750000030443,
+        "p90": 387.52759999988484,
+        "p99": 480.5785000007745
+      },
+      "end_to_end_ms": {
+        "p50": 11124.541200000749,
+        "p90": 23235.205400000268,
+        "p99": 67308.86540000029,
+        "max": 67308.86540000029
+      },
+      "status_codes": {
+        "202": 32
+      },
+      "errors": [],
+      "notes": [
+        "worker stopped after 10/32 completions",
+        "worker restarted after 15s outage with 22 jobs outstanding"
+      ]
+    }
+  ],
+  "caveats": [
+    "No Redis/Valkey server was reachable, so the queue ran in-process (fakeredis). Queue semantics are the same, but there is no network hop, no fsync and no cross-process contention \u2014 real deployments will be somewhat slower.",
+    "Client and server share one machine, so client CPU competes with preprocessing."
+  ],
+  "queue": "in-process (fakeredis)"
+}

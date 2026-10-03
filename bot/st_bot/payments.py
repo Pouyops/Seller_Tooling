@@ -1,4 +1,4 @@
-"""Payment hook. **Stub only**: no real gateway is integrated (brief; HUMAN_NEEDED H-009).
+"""Payment hook. **Stub only**: no real gateway is integrated (brief; HUMAN_NEEDED H-010).
 
 ``PaymentProvider`` is the seam a real Iranian PSP adapter (Zarinpal, Zibal, IDPay, ...) will
 implement: create an invoice, hand the user a pay URL, verify on callback, then credit the account
@@ -22,7 +22,7 @@ P = "st:bot:invoice"
 class Pack:
     id: str
     credits: int
-    price_toman: int  # PLACEHOLDER prices, see docs/economics.md and HUMAN_NEEDED H-010
+    price_toman: int  # PLACEHOLDER prices, see docs/economics.md and HUMAN_NEEDED H-011
 
 
 PACKS: tuple[Pack, ...] = (

@@ -79,7 +79,7 @@ class Worker:
         self.redis = redis_client
         self.queue: JobQueue | None = JobQueue(redis_client, visibility_timeout_ms=self.s.visibility_timeout_ms,
                                                max_attempts=self.s.max_attempts) if redis_client is not None else None
-        self.blobs = BlobStore(self.s.blobs_dir)
+        self.blobs = BlobStore(self.s.blobs_dir, fsync=self.s.blob_fsync_results)
         self.model_factory = model_factory or self._default_factory
         self.device_probe = device_probe or self._probe_device
         self.models: dict[str, object] = {}
